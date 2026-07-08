@@ -18,7 +18,7 @@ This project predicts daily sales for Rossmann stores using historical sales dat
 ## Dataset
 
 [Rossmann Store Sales](https://www.kaggle.com/competitions/rossmann-store-sales) dataset from Kaggle:
-- `train.csv` — daily sales, promo, and holiday data per store
+- `train.csv` — daily sales, promo, and holiday data per store (compressed as `train.csv.gz` in this repo)
 - `store.csv` — store metadata (type, assortment, competition distance, Promo2 details)
 
 ## Pipeline
@@ -30,16 +30,40 @@ This project predicts daily sales for Rossmann stores using historical sales dat
 5. **Train** Linear Regression and Random Forest on identical train/test splits
 6. **Evaluate** using MAE, MSE, R²
 
-## Data Leakage Note
+## How I Improved the Model
 
-An earlier version of this model included `Customers` as a feature, which produced an inflated R² of 0.97. This was **data leakage** — `Customers` isn't known ahead of time when forecasting future sales, and it's highly correlated with `Sales` almost by definition. It was removed to reflect a realistic forecasting scenario. The results below are the corrected, leakage-free numbers.
+This project didn't start in its current state — it went through several rounds of debugging and refinement, each fixing a real weakness:
+
+1. **Started simple.** The first version trained directly on `train.csv` alone, dropped the `Date` column entirely, and used a random 80/20 train/test split.
+
+2. **Brought in more signal.** Realized the Rossmann dataset ships a second file, `store.csv`, with store-level metadata (type, assortment, competition distance, promo history) that wasn't being used at all. Merged it in on `Store` id — this unlocked features the model had no access to before.
+
+3. **Stopped throwing away the date.** Instead of dropping `Date`, extracted `Year`, `Month`, `Day`, `DayOfWeek`, and `WeekOfYear` from it, since retail sales are strongly seasonal (weekday vs weekend, holidays, time of year).
+
+4. **Cleaned the data properly.** Switched from a blanket `dropna()` (which would've silently deleted most rows once `store.csv` was merged, since most stores don't run `Promo2`) to targeted `fillna()` — filling missing values with medians or "not applicable" defaults depending on what the missingness actually meant.
+
+5. **Removed noisy rows.** Filtered out closed stores (`Open == 0`), since these rows have `Sales == 0` by definition and were just dragging down the error metrics without adding predictive value.
+
+6. **Fixed the evaluation methodology.** Switched from a random train/test split to a **chronological** split — since this is time-series data, a random split lets "future" days leak into training, giving an artificially rosy performance estimate.
+
+7. **Found and fixed real data leakage.** An early version included `Customers` as a feature, which pushed R² up to 0.96. Investigated why the score looked "too good," and realized `Customers` isn't information you'd actually have in advance when forecasting future sales — it's essentially a proxy for `Sales` itself. Removed it, and the honest R² dropped to a more realistic ~0.88 for Random Forest.
+
+8. **Added interpretability.** Added a Random Forest feature importance chart to show *what* the model is actually relying on, not just how accurate it is.
+
+### Outcome
+
+The end-to-end result is a model that's honest about its own limitations rather than one that looks artificially perfect. Random Forest explains **~88.6%** of the variance in daily sales with an average error of **~698 units** — using only information that would genuinely be available ahead of a forecast (no future data, no post-hoc customer counts).
+
+### What this exercise reinforced
+
+Beyond the model itself, this project was a hands-on lesson in **data leakage** — how a single innocuous-looking feature can quietly inflate performance metrics and hide the true difficulty of a problem. Catching it, understanding *why* it was wrong, and correcting it was a more valuable takeaway than the final R² number itself.
 
 ## Results
 
 | Model | MAE | MSE | R² Score |
 |---|---|---|---|
-| Linear Regression | 2177.52 | 7,860,171.40 | 0.178 |
-| Random Forest | 878.17 | 1,545,643.46 | 0.838 |
+| Linear Regression | 1958.98 | 7,271,356.71 | 0.225 |
+| Random Forest | 698.03 | 1,072,378.77 | 0.886 |
 
 Random Forest substantially outperforms Linear Regression, capturing non-linear interactions between promotions, store type, competition, and seasonality that a linear model can't.
 
@@ -48,28 +72,17 @@ Random Forest substantially outperforms Linear Regression, capturing non-linear 
 ## How to Run
 
 1. Clone the repo
-2. Download `train.csv` and `store.csv` from Kaggle and place them in the project directory
-3. Open the notebook in Google Colab or Jupyter
-4. Run all cells top to bottom (**Runtime -> Restart session -> Run all** in Colab)
-
-## Project Updates
-
-Changelog of improvements made after the initial version:
-
-- **Merged `store.csv`** into the training data (StoreType, Assortment, CompetitionDistance, Promo2 details) — previously the model only used `train.csv`
-- **Fixed missing values properly** — replaced blanket `dropna()` with targeted `fillna()` for structurally-missing store metadata (e.g. stores with no Promo2 or no recorded competitor), instead of discarding data
-- **Filtered closed stores** (`Open == 0`) since these rows have `Sales == 0` and add noise, not signal
-- **Added date-based feature engineering** — extracted `Year`, `Month`, `Day`, `DayOfWeek`, `WeekOfYear` from `Date` instead of dropping the column entirely
-- **Fixed `StateHoliday` dtype** — cast to string before one-hot encoding to avoid duplicate/broken dummy columns
-- **Switched to a chronological train/test split** (80/20 by date) instead of a random split, since random splitting on time-series data leaks future information into training
-- **Added Random Forest feature importance** analysis and chart
-- **Identified and fixed data leakage** — `Customers` was included as a feature and inflated R² to 0.96; removed it since customer count isn't known ahead of time when forecasting, and it's essentially a proxy for sales
+2. `train.csv.gz` and `store.csv` are already included — unzip `train.csv.gz` first (`gunzip train.csv.gz`), or load it directly with `pd.read_csv("train.csv.gz", compression="gzip")`
+3. Install dependencies: `pip install -r requirements.txt`
+4. Open the notebook in Google Colab or Jupyter
+5. Run all cells top to bottom (**Runtime → Restart session → Run all** in Colab)
 
 ## Possible Next Steps
 
 - Hyperparameter tuning (GridSearchCV / RandomizedSearchCV) for Random Forest
 - Lag features (e.g. previous week's average sales per store)
 - Cross-validation instead of a single train/test split
+- Save a trained model artifact (joblib/pickle) for reuse outside the notebook
 
 ## Author
 
