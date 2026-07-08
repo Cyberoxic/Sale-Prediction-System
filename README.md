@@ -32,7 +32,7 @@ This project predicts daily sales for Rossmann stores using historical sales dat
 
 ## Data Leakage Note
 
-An earlier version of this model included `Customers` as a feature, which produced an inflated R² of 0.96. This was **data leakage** — `Customers` isn't known ahead of time when forecasting future sales, and it's highly correlated with `Sales` almost by definition. It was removed to reflect a realistic forecasting scenario. The results below are the corrected, leakage-free numbers.
+An earlier version of this model included `Customers` as a feature, which produced an inflated R² of 0.97. This was **data leakage** — `Customers` isn't known ahead of time when forecasting future sales, and it's highly correlated with `Sales` almost by definition. It was removed to reflect a realistic forecasting scenario. The results below are the corrected, leakage-free numbers.
 
 ## Results
 
